@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hand Tracking con JavaScript</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <style>
+            /* Estilos generales */
+    body {
+        text-align: center;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+    }
+
+    video, canvas {
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+    }
+
+    /* Estilo para cuando la pantalla está en modo vertical */
+    @media (orientation: portrait) {
+        video, canvas {
+            width: 100%;
+            height: auto;
+        }
+    }
+
+    /* Estilo para cuando la pantalla está en modo horizontal */
+    @media (orientation: landscape) {
+        video, canvas {
+            width: 100%;
+            height: auto;
+        }
+    }
+    /* Corregir el video invertido */
+    video {
+        transform: rotate(180deg); /* Esto puede corregir la orientación de la cámara */
+    }
+    </style>
+</head>
+
+<body>
+    <h1>Hand Tracking con JavaScript</h1>
+    <div class="camera-container">
+        <video id="video" autoplay playsinline></video>
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <script>
+        const video = document.getElementById("video");
+        const canvas = document.getElementById("canvas");
+        const ctx = canvas.getContext("2d");
+
+        // Variables para el control de grabación
+        let isRecording = false;
+        let mediaRecorder;
+        let recordedChunks = [];
+        let recordingCount = 1;
+        let mediaStream; // Variable global para almacenar el stream de medios
+
+        // Configurar MediaPipe Hands
+        const hands = new Hands({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        });
+
+        hands.setOptions({
+            maxNumHands: 2, // Detectar hasta 2 manos
+            modelComplexity: 1,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
+
+        hands.onResults((results) => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            if (results.multiHandLandmarks) {
+                let totalRaisedFingers = 0;
+
+                for (const landmarks of results.multiHandLandmarks) {
+                    drawConnectors(ctx, landmarks, HAND_CONNECTIONS, { color: 'cyan', lineWidth: 2 });
+                    drawLandmarks(ctx, landmarks, { color: 'white', radius: 5 });
+
+                    // Detectar dedos levantados para esta mano
+                    const raisedFingers = countRaisedFingers(landmarks);
+                    totalRaisedFingers += raisedFingers;
+                }
+
+                // Mostrar el total de dedos levantados
+                displayTotalFingerCount(totalRaisedFingers);
+
+                // Lógica para iniciar/detener la grabación
+                if (totalRaisedFingers === 3 && !isRecording) {
+                    speak("Gesture detected. Starting recording.");
+                    startRecording();
+                } else if (totalRaisedFingers > 7 && isRecording) {
+                    speak("Stopping recording.");
+                    stopRecording();
+                }
+            }
+        });
+
+        // Función para contar dedos levantados
+        function countRaisedFingers(landmarks) {
+            const fingerTips = [4, 8, 12, 16, 20];
+            let raisedFingers = 0;
+
+            for (let i = 1; i < fingerTips.length; i++) {
+                if (landmarks[fingerTips[i]].y < landmarks[fingerTips[i] - 2].y) {
+                    raisedFingers++;
+                }
+            }
+
+            return raisedFingers;
+        }
+
+        // Función para mostrar el número total de dedos levantados en la pantalla
+        function displayTotalFingerCount(totalRaisedFingers) {
+            const text = `Total dedos levantados: ${totalRaisedFingers}`;
+            const x = 20; // Posición X del texto
+            const y = 50; // Posición Y del texto
+
+            ctx.font = '20px Arial';
+            ctx.fillStyle = 'white';
+            ctx.fillText(text, x, y);
+        }
+
+        // Función para reproducir mensajes de voz
+        function speak(text) {
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'en-US'; // Idioma inglés
+            speechSynthesis.speak(utterance);
+        }
+
+        // Iniciar la grabación reutilizando el stream de medios
+        async function startRecording() {
+            if (!mediaStream) {
+                console.error('No se ha obtenido el stream de medios.');
+                return;
+            }
+
+            mediaRecorder = new MediaRecorder(mediaStream, { mimeType: 'video/webm' });
+            recordedChunks = [];
+
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                speak("Uploading to Google Drive.");
+                uploadToBackend(blob);  // Subir directamente al backend
+            };
+
+            mediaRecorder.start();
+            isRecording = true;
+            console.log("Recording started");
+        }
+
+        // Detener la grabación
+        function stopRecording() {
+            mediaRecorder.stop();
+            isRecording = false;
+            console.log("Recording stopped");
+        }
+
+        // Subir archivo al backend
+        async function uploadToBackend(blob) {
+            const formData = new FormData();
+            formData.append('file', blob, `recording_${recordingCount}.webm`);
+
+            try {
+                const response = await fetch('http://localhost:5000/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    console.log("Archivo subido exitosamente");
+                } else {
+                    console.error("Error al subir el archivo");
+                }
+            } catch (error) {
+                console.error("Error en la solicitud:", error);
+            }
+        }
+
+        // Función para seleccionar la cámara trasera
+        async function getRearCamera() {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const videoDevices = devices.filter(device => device.kind === 'videoinput');
+
+            // Buscar la cámara trasera por su etiqueta (puede variar según el dispositivo)
+            const rearCamera = videoDevices.find(device => device.label.toLowerCase().includes('back'));
+
+            if (rearCamera) {
+                return rearCamera.deviceId;
+            } else {
+                console.warn("No se encontró la cámara trasera. Usando la cámara frontal por defecto.");
+                return null;
+            }
+        }
+
+        async function startCamera() {
+            try {
+                const rearCameraId = await getRearCamera();
+                const constraints = {
+                    video: {
+                        deviceId: rearCameraId ? { exact: rearCameraId } : undefined,
+                        facingMode: rearCameraId ? undefined : 'environment' // Usar 'environment' como respaldo
+                    },
+                    audio: true
+                };
+
+                // Solicitar permisos para la cámara y el micrófono al inicio
+                mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = mediaStream;
+                video.play();
+
+                video.onloadedmetadata = () => {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+
+                    const camera = new Camera(video, {
+                        onFrame: async () => {
+                            await hands.send({ image: video });
+                        },
+                        width: video.videoWidth,
+                        height: video.videoHeight
+                    });
+
+                    camera.start();
+                };
+            } catch (error) {
+                console.error('Error al acceder a la cámara y/o micrófono:', error);
+            }
+        }
+
+        // Iniciar la cámara y solicitar permisos una sola vez
+        async function startCamera() {
+            try {
+                const rearCameraId = await getRearCamera();
+                const constraints = {
+                    video: {
+                        deviceId: rearCameraId ? { exact: rearCameraId } : undefined,
+                        facingMode: rearCameraId ? undefined : 'environment' // Usar 'environment' para la cámara trasera
+                    },
+                    audio: true
+                };
+
+                // Solicitar permisos para la cámara y el micrófono al inicio
+                mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = mediaStream;
+                video.play();
+
+                video.onloadedmetadata = () => {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+
+                    const camera = new Camera(video, {
+                        onFrame: async () => {
+                            await hands.send({ image: video });
+                        },
+                        width: video.videoWidth,
+                        height: video.videoHeight
+                    });
+
+                    camera.start();
+                };
+            } catch (error) {
+                console.error('Error al acceder a la cámara y/o micrófono:', error);
+            }
+        }
+
+        // Inicializar la aplicación
+        startCamera();
+    </script>
+</body>
+
+</html>
