@@ -96,7 +96,7 @@
                 return;
             }
 
-            mediaRecorder = new MediaRecorder(mediaStream, { mimeType: 'video/webm' });
+            mediaRecorder = new MediaRecorder(mediaStream, { mimeType: 'video/webm; codecs=vp9' });
             recordedChunks = [];
 
             mediaRecorder.ondataavailable = (event) => {
@@ -141,8 +141,19 @@
         async function startCamera() {
             try {
                 const constraints = {
-                    video: { facingMode: 'environment' },
-                    audio: true
+                    video: {
+                        deviceId: rearCameraId ? { exact: rearCameraId } : undefined,
+                        facingMode: rearCameraId ? undefined : 'environment',
+                        width: { ideal: 1920 }, // 1080p
+                        height: { ideal: 1080 },
+                        frameRate: { ideal: 60 } // Si el dispositivo lo soporta
+                    },
+                    audio: {
+                        sampleRate: 48000, // Calidad de audio mejorada
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }
                 };
 
                 mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
