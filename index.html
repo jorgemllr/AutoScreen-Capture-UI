@@ -32,11 +32,6 @@
             object-fit: cover;
         }
 
-        /* Corregir el video invertido */
-        video {
-            transform: rotate(180deg);
-        }
-
         /* Estilo para el contador de grabación */
         .recording-status {
             position: absolute;
@@ -57,7 +52,7 @@
     <div class="camera-container">
         <video id="video" autoplay playsinline></video>
         <canvas id="canvas"></canvas>
-        <div id="recordingStatus" class="recording-status">Grabación: Detenida</div>
+        <div id="recordingStatus" class="recording-status">Recording: Stopped</div>
     </div>
 
     <script>
@@ -73,7 +68,7 @@
         let recordingCount = 1;
         let mediaStream; // Variable global para almacenar el stream de medios
 
-        // Función para reproducir mensajes de voz
+        // Función para reproducir mensajes de voz en inglés
         function speak(text) {
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = 'en-US'; // Idioma inglés
@@ -100,11 +95,13 @@
                 const blob = new Blob(recordedChunks, { type: 'video/webm' });
                 speak("Uploading to Google Drive.");
                 uploadToBackend(blob);  // Subir directamente al backend
+                downloadVideo(blob);  // Descargar el video localmente
             };
 
             mediaRecorder.start();
             isRecording = true;
-            recordingStatus.textContent = "Grabación: Activa";
+            recordingStatus.textContent = "Recording: Active";
+            speak("Recording started"); // Anunciar el inicio de la grabación
             console.log("Recording started");
         }
 
@@ -112,7 +109,8 @@
         function stopRecording() {
             mediaRecorder.stop();
             isRecording = false;
-            recordingStatus.textContent = "Grabación: Detenida";
+            recordingStatus.textContent = "Recording: Stopped";
+            speak("Recording stopped"); // Anunciar el fin de la grabación
             console.log("Recording stopped");
         }
 
@@ -135,6 +133,20 @@
             } catch (error) {
                 console.error("Error en la solicitud:", error);
             }
+        }
+
+        // Descargar el video localmente
+        function downloadVideo(blob) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = `recording_${recordingCount}.webm`;
+            document.body.appendChild(a);
+            a.click();
+            URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            recordingCount++;
         }
 
         // Función para seleccionar la cámara trasera
