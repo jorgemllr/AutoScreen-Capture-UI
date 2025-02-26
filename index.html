@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Grabación con Botón</title>
+    <title>Grabación con Alta Calidad</title>
     <style>
         /* Estilos generales */
         body {
@@ -96,7 +96,12 @@
                 return;
             }
 
-            mediaRecorder = new MediaRecorder(mediaStream, { mimeType: 'video/webm; codecs=vp9' });
+            const options = { mimeType: 'video/webm;codecs=vp9', videoBitsPerSecond: 5000000 }; // 5 Mbps
+            if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                options.mimeType = 'video/webm'; // Fallback
+            }
+
+            mediaRecorder = new MediaRecorder(mediaStream, options);
             recordedChunks = [];
 
             mediaRecorder.ondataavailable = (event) => {
@@ -106,7 +111,7 @@
             };
 
             mediaRecorder.onstop = () => {
-                const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                const blob = new Blob(recordedChunks, { type: options.mimeType });
                 speak("Uploading to Google Drive.");
                 downloadVideo(blob);
             };
@@ -142,17 +147,16 @@
             try {
                 const constraints = {
                     video: {
-                        deviceId: rearCameraId ? { exact: rearCameraId } : undefined,
-                        facingMode: rearCameraId ? undefined : 'environment',
-                        width: { ideal: 1920 }, // 1080p
+                        width: { ideal: 1920 },  // 1080p
                         height: { ideal: 1080 },
-                        frameRate: { ideal: 60 } // Si el dispositivo lo soporta
+                        frameRate: { ideal: 60 }, // 60 FPS
+                        facingMode: 'environment'
                     },
                     audio: {
-                        sampleRate: 48000, // Calidad de audio mejorada
-                        echoCancellation: true,
-                        noiseSuppression: true,
-                        autoGainControl: true
+                        sampleRate: 48000,  // Alta calidad de audio
+                        channelCount: 2,    // Estéreo
+                        echoCancellation: false,
+                        noiseSuppression: false
                     }
                 };
 
