@@ -4,10 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hand Tracking</title>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <title>Grabación con Tecla de Volumen</title>
     <style>
         /* Estilos generales */
         body {
@@ -40,8 +37,8 @@
             transform: rotate(180deg);
         }
 
-        /* Estilo para el contador de dedos */
-        .finger-counter {
+        /* Estilo para el contador de grabación */
+        .recording-status {
             position: absolute;
             top: 20px;
             left: 20px;
@@ -60,14 +57,14 @@
     <div class="camera-container">
         <video id="video" autoplay playsinline></video>
         <canvas id="canvas"></canvas>
-        <div id="fingerCounter" class="finger-counter">Dedos: 0</div>
+        <div id="recordingStatus" class="recording-status">Grabación: Detenida</div>
     </div>
 
     <script>
         const video = document.getElementById("video");
         const canvas = document.getElementById("canvas");
         const ctx = canvas.getContext("2d");
-        const fingerCounter = document.getElementById("fingerCounter");
+        const recordingStatus = document.getElementById("recordingStatus");
 
         // Variables para el control de grabación
         let isRecording = false;
@@ -75,63 +72,6 @@
         let recordedChunks = [];
         let recordingCount = 1;
         let mediaStream; // Variable global para almacenar el stream de medios
-
-        // Configurar MediaPipe Hands
-        const hands = new Hands({
-            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-        });
-
-        hands.setOptions({
-            maxNumHands: 2, // Detectar hasta 2 manos
-            modelComplexity: 0, // Reducir la complejidad del modelo para mejorar el rendimiento
-            minDetectionConfidence: 0.5,
-            minTrackingConfidence: 0.5
-        });
-
-        hands.onResults((results) => {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-            if (results.multiHandLandmarks) {
-                let totalRaisedFingers = 0;
-
-                for (const landmarks of results.multiHandLandmarks) {
-                    // Comentamos las siguientes líneas para ocultar los gestos
-                    // drawConnectors(ctx, landmarks, HAND_CONNECTIONS, { color: 'cyan', lineWidth: 2 });
-                    // drawLandmarks(ctx, landmarks, { color: 'white', radius: 5 });
-
-                    // Detectar dedos levantados para esta mano
-                    const raisedFingers = countRaisedFingers(landmarks);
-                    totalRaisedFingers += raisedFingers;
-                }
-
-                // Actualizar el contador de dedos
-                fingerCounter.textContent = `Dedos: ${totalRaisedFingers}`;
-
-                // Lógica para iniciar/detener la grabación
-                if (totalRaisedFingers === 3 && !isRecording) {
-                    speak("Gesture detected. Starting recording.");
-                    startRecording();
-                } else if (totalRaisedFingers > 7 && isRecording) {
-                    speak("Stopping recording.");
-                    stopRecording();
-                }
-            }
-        });
-
-        // Función para contar dedos levantados
-        function countRaisedFingers(landmarks) {
-            const fingerTips = [4, 8, 12, 16, 20];
-            let raisedFingers = 0;
-
-            for (let i = 1; i < fingerTips.length; i++) {
-                if (landmarks[fingerTips[i]].y < landmarks[fingerTips[i] - 2].y) {
-                    raisedFingers++;
-                }
-            }
-
-            return raisedFingers;
-        }
 
         // Función para reproducir mensajes de voz
         function speak(text) {
@@ -164,6 +104,7 @@
 
             mediaRecorder.start();
             isRecording = true;
+            recordingStatus.textContent = "Grabación: Activa";
             console.log("Recording started");
         }
 
@@ -171,6 +112,7 @@
         function stopRecording() {
             mediaRecorder.stop();
             isRecording = false;
+            recordingStatus.textContent = "Grabación: Detenida";
             console.log("Recording stopped");
         }
 
@@ -230,21 +172,22 @@
                 video.onloadedmetadata = () => {
                     canvas.width = video.videoWidth;
                     canvas.height = video.videoHeight;
-
-                    const camera = new Camera(video, {
-                        onFrame: async () => {
-                            await hands.send({ image: video });
-                        },
-                        width: video.videoWidth,
-                        height: video.videoHeight
-                    });
-
-                    camera.start();
                 };
             } catch (error) {
                 console.error('Error al acceder a la cámara y/o micrófono:', error);
             }
         }
+
+        // Detectar la pulsación de la tecla de volumen
+        document.addEventListener('keydown', (event) => {
+            if (event.key === "VolumeUp" || event.key === "VolumeDown") {
+                if (!isRecording) {
+                    startRecording();
+                } else {
+                    stopRecording();
+                }
+            }
+        });
 
         // Inicializar la aplicación
         startCamera();
