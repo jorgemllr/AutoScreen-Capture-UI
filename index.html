@@ -4,58 +4,70 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hand Tracking con JavaScript</title>
+    <title>Hand Tracking</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
     <style>
-            /* Estilos generales */
-    body {
-        text-align: center;
-        margin: 0;
-        padding: 0;
-        overflow: hidden;
-    }
-
-    video, canvas {
-        position: absolute;
-        left: 50%;
-        transform: translateX(-50%);
-    }
-
-    /* Estilo para cuando la pantalla está en modo vertical */
-    @media (orientation: portrait) {
-        video, canvas {
-            width: 100%;
-            height: auto;
+        /* Estilos generales */
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: black;
         }
-    }
 
-    /* Estilo para cuando la pantalla está en modo horizontal */
-    @media (orientation: landscape) {
-        video, canvas {
-            width: 100%;
-            height: auto;
+        .camera-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
         }
-    }
-    /* Corregir el video invertido */
-    video {
-        transform: rotate(180deg); /* Esto puede corregir la orientación de la cámara */
-    }
+
+        video, canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* Corregir el video invertido */
+        video {
+            transform: rotate(180deg);
+        }
+
+        /* Estilo para el contador de dedos */
+        .finger-counter {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+            z-index: 1000; /* Asegura que esté por encima del video y canvas */
+            background-color: rgba(0, 0, 0, 0.5); /* Fondo semitransparente */
+            padding: 10px;
+            border-radius: 5px;
+        }
     </style>
 </head>
 
 <body>
-    <h1>Hand Tracking con JavaScript</h1>
     <div class="camera-container">
         <video id="video" autoplay playsinline></video>
         <canvas id="canvas"></canvas>
+        <div id="fingerCounter" class="finger-counter">Dedos: 0</div>
     </div>
 
     <script>
         const video = document.getElementById("video");
         const canvas = document.getElementById("canvas");
         const ctx = canvas.getContext("2d");
+        const fingerCounter = document.getElementById("fingerCounter");
 
         // Variables para el control de grabación
         let isRecording = false;
@@ -71,7 +83,7 @@
 
         hands.setOptions({
             maxNumHands: 2, // Detectar hasta 2 manos
-            modelComplexity: 1,
+            modelComplexity: 0, // Reducir la complejidad del modelo para mejorar el rendimiento
             minDetectionConfidence: 0.5,
             minTrackingConfidence: 0.5
         });
@@ -84,16 +96,17 @@
                 let totalRaisedFingers = 0;
 
                 for (const landmarks of results.multiHandLandmarks) {
-                    drawConnectors(ctx, landmarks, HAND_CONNECTIONS, { color: 'cyan', lineWidth: 2 });
-                    drawLandmarks(ctx, landmarks, { color: 'white', radius: 5 });
+                    // Comentamos las siguientes líneas para ocultar los gestos
+                    // drawConnectors(ctx, landmarks, HAND_CONNECTIONS, { color: 'cyan', lineWidth: 2 });
+                    // drawLandmarks(ctx, landmarks, { color: 'white', radius: 5 });
 
                     // Detectar dedos levantados para esta mano
                     const raisedFingers = countRaisedFingers(landmarks);
                     totalRaisedFingers += raisedFingers;
                 }
 
-                // Mostrar el total de dedos levantados
-                displayTotalFingerCount(totalRaisedFingers);
+                // Actualizar el contador de dedos
+                fingerCounter.textContent = `Dedos: ${totalRaisedFingers}`;
 
                 // Lógica para iniciar/detener la grabación
                 if (totalRaisedFingers === 3 && !isRecording) {
@@ -118,17 +131,6 @@
             }
 
             return raisedFingers;
-        }
-
-        // Función para mostrar el número total de dedos levantados en la pantalla
-        function displayTotalFingerCount(totalRaisedFingers) {
-            const text = `Total dedos levantados: ${totalRaisedFingers}`;
-            const x = 20; // Posición X del texto
-            const y = 50; // Posición Y del texto
-
-            ctx.font = '20px Arial';
-            ctx.fillStyle = 'white';
-            ctx.fillText(text, x, y);
         }
 
         // Función para reproducir mensajes de voz
@@ -209,42 +211,6 @@
             }
         }
 
-        async function startCamera() {
-            try {
-                const rearCameraId = await getRearCamera();
-                const constraints = {
-                    video: {
-                        deviceId: rearCameraId ? { exact: rearCameraId } : undefined,
-                        facingMode: rearCameraId ? undefined : 'environment' // Usar 'environment' como respaldo
-                    },
-                    audio: true
-                };
-
-                // Solicitar permisos para la cámara y el micrófono al inicio
-                mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-                video.srcObject = mediaStream;
-                video.play();
-
-                video.onloadedmetadata = () => {
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
-
-                    const camera = new Camera(video, {
-                        onFrame: async () => {
-                            await hands.send({ image: video });
-                        },
-                        width: video.videoWidth,
-                        height: video.videoHeight
-                    });
-
-                    camera.start();
-                };
-            } catch (error) {
-                console.error('Error al acceder a la cámara y/o micrófono:', error);
-            }
-        }
-
-        // Iniciar la cámara y solicitar permisos una sola vez
         async function startCamera() {
             try {
                 const rearCameraId = await getRearCamera();
