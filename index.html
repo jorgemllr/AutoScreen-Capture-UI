@@ -6,22 +6,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Grabación con Botón</title>
     <style>
+        /* Estilos generales */
         body {
             margin: 0;
             padding: 0;
             overflow: hidden;
             background-color: black;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            flex-direction: column;
         }
 
         .camera-container {
             position: relative;
             width: 100vw;
-            height: 80vh;
+            height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -36,6 +32,7 @@
             object-fit: cover;
         }
 
+        /* Estilo para el contador de grabación */
         .recording-status {
             position: absolute;
             top: 20px;
@@ -49,15 +46,20 @@
             border-radius: 5px;
         }
 
-        .record-btn {
-            margin-top: 20px;
-            padding: 15px 30px;
-            font-size: 18px;
+        /* Estilo para el botón de grabación */
+        .record-button {
+            position: absolute;
+            top: 50%;
+            right: 20px;
+            transform: translateY(-50%);
             background-color: red;
             color: white;
             border: none;
-            border-radius: 10px;
+            padding: 15px 20px;
+            font-size: 18px;
+            border-radius: 50px;
             cursor: pointer;
+            z-index: 1000;
         }
     </style>
 </head>
@@ -67,18 +69,20 @@
         <video id="video" autoplay playsinline></video>
         <canvas id="canvas"></canvas>
         <div id="recordingStatus" class="recording-status">Recording: Stopped</div>
+        <button id="recordButton" class="record-button">Start Recording</button>
     </div>
-    <button id="recordButton" class="record-btn">Start Recording</button>
 
     <script>
         const video = document.getElementById("video");
+        const canvas = document.getElementById("canvas");
+        const ctx = canvas.getContext("2d");
         const recordingStatus = document.getElementById("recordingStatus");
         const recordButton = document.getElementById("recordButton");
+
         let isRecording = false;
         let mediaRecorder;
         let recordedChunks = [];
         let mediaStream;
-        let recordingCount = 1;
 
         function speak(text) {
             const utterance = new SpeechSynthesisUtterance(text);
@@ -127,18 +131,28 @@
             const a = document.createElement('a');
             a.style.display = 'none';
             a.href = url;
-            a.download = `recording_${recordingCount}.webm`;
+            a.download = `recording.webm`;
             document.body.appendChild(a);
             a.click();
             URL.revokeObjectURL(url);
             document.body.removeChild(a);
-            recordingCount++;
         }
 
         async function startCamera() {
             try {
-                mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                const constraints = {
+                    video: { facingMode: 'environment' },
+                    audio: true
+                };
+
+                mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
                 video.srcObject = mediaStream;
+                video.play();
+
+                video.onloadedmetadata = () => {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                };
             } catch (error) {
                 console.error('Error al acceder a la cámara y/o micrófono:', error);
             }
