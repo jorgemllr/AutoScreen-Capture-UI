@@ -4,20 +4,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Grabación con Tecla de Volumen</title>
+    <title>Grabación con Botón</title>
     <style>
-        /* Estilos generales */
         body {
             margin: 0;
             padding: 0;
             overflow: hidden;
             background-color: black;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            flex-direction: column;
         }
 
         .camera-container {
             position: relative;
             width: 100vw;
-            height: 100vh;
+            height: 80vh;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -32,7 +36,6 @@
             object-fit: cover;
         }
 
-        /* Estilo para el contador de grabación */
         .recording-status {
             position: absolute;
             top: 20px;
@@ -40,10 +43,21 @@
             color: white;
             font-size: 24px;
             font-weight: bold;
-            z-index: 1000; /* Asegura que esté por encima del video y canvas */
-            background-color: rgba(0, 0, 0, 0.5); /* Fondo semitransparente */
+            z-index: 1000;
+            background-color: rgba(0, 0, 0, 0.5);
             padding: 10px;
             border-radius: 5px;
+        }
+
+        .record-btn {
+            margin-top: 20px;
+            padding: 15px 30px;
+            font-size: 18px;
+            background-color: red;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
         }
     </style>
 </head>
@@ -54,28 +68,24 @@
         <canvas id="canvas"></canvas>
         <div id="recordingStatus" class="recording-status">Recording: Stopped</div>
     </div>
+    <button id="recordButton" class="record-btn">Start Recording</button>
 
     <script>
         const video = document.getElementById("video");
-        const canvas = document.getElementById("canvas");
-        const ctx = canvas.getContext("2d");
         const recordingStatus = document.getElementById("recordingStatus");
-
-        // Variables para el control de grabación
+        const recordButton = document.getElementById("recordButton");
         let isRecording = false;
         let mediaRecorder;
         let recordedChunks = [];
+        let mediaStream;
         let recordingCount = 1;
-        let mediaStream; // Variable global para almacenar el stream de medios
 
-        // Función para reproducir mensajes de voz en inglés
         function speak(text) {
             const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'en-US'; // Idioma inglés
+            utterance.lang = 'en-US';
             speechSynthesis.speak(utterance);
         }
 
-        // Iniciar la grabación reutilizando el stream de medios
         async function startRecording() {
             if (!mediaStream) {
                 console.error('No se ha obtenido el stream de medios.');
@@ -94,48 +104,24 @@
             mediaRecorder.onstop = () => {
                 const blob = new Blob(recordedChunks, { type: 'video/webm' });
                 speak("Uploading to Google Drive.");
-                uploadToBackend(blob);  // Subir directamente al backend
-                downloadVideo(blob);  // Descargar el video localmente
+                downloadVideo(blob);
             };
 
             mediaRecorder.start();
             isRecording = true;
             recordingStatus.textContent = "Recording: Active";
-            speak("Recording started"); // Anunciar el inicio de la grabación
-            console.log("Recording started");
+            recordButton.textContent = "Stop Recording";
+            speak("Recording started");
         }
 
-        // Detener la grabación
         function stopRecording() {
             mediaRecorder.stop();
             isRecording = false;
             recordingStatus.textContent = "Recording: Stopped";
-            speak("Recording stopped"); // Anunciar el fin de la grabación
-            console.log("Recording stopped");
+            recordButton.textContent = "Start Recording";
+            speak("Recording stopped");
         }
 
-        // Subir archivo al backend
-        async function uploadToBackend(blob) {
-            const formData = new FormData();
-            formData.append('file', blob, `recording_${recordingCount}.webm`);
-
-            try {
-                const response = await fetch('http://localhost:5000/upload', {
-                    method: 'POST',
-                    body: formData
-                });
-
-                if (response.ok) {
-                    console.log("Archivo subido exitosamente");
-                } else {
-                    console.error("Error al subir el archivo");
-                }
-            } catch (error) {
-                console.error("Error en la solicitud:", error);
-            }
-        }
-
-        // Descargar el video localmente
         function downloadVideo(blob) {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -149,59 +135,23 @@
             recordingCount++;
         }
 
-        // Función para seleccionar la cámara trasera
-        async function getRearCamera() {
-            const devices = await navigator.mediaDevices.enumerateDevices();
-            const videoDevices = devices.filter(device => device.kind === 'videoinput');
-
-            // Buscar la cámara trasera por su etiqueta (puede variar según el dispositivo)
-            const rearCamera = videoDevices.find(device => device.label.toLowerCase().includes('back'));
-
-            if (rearCamera) {
-                return rearCamera.deviceId;
-            } else {
-                console.warn("No se encontró la cámara trasera. Usando la cámara frontal por defecto.");
-                return null;
-            }
-        }
-
         async function startCamera() {
             try {
-                const rearCameraId = await getRearCamera();
-                const constraints = {
-                    video: {
-                        deviceId: rearCameraId ? { exact: rearCameraId } : undefined,
-                        facingMode: rearCameraId ? undefined : 'environment' // Usar 'environment' para la cámara trasera
-                    },
-                    audio: true
-                };
-
-                // Solicitar permisos para la cámara y el micrófono al inicio
-                mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+                mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
                 video.srcObject = mediaStream;
-                video.play();
-
-                video.onloadedmetadata = () => {
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
-                };
             } catch (error) {
                 console.error('Error al acceder a la cámara y/o micrófono:', error);
             }
         }
 
-        // Detectar la pulsación de la tecla de volumen
-        document.addEventListener('keydown', (event) => {
-            if (event.key === "VolumeUp" || event.key === "VolumeDown") {
-                if (!isRecording) {
-                    startRecording();
-                } else {
-                    stopRecording();
-                }
+        recordButton.addEventListener("click", () => {
+            if (!isRecording) {
+                startRecording();
+            } else {
+                stopRecording();
             }
         });
 
-        // Inicializar la aplicación
         startCamera();
     </script>
 </body>
